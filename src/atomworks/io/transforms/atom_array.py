@@ -179,29 +179,29 @@ def keep_last_residue(atom_array: AtomArray | AtomArrayStack) -> AtomArray | Ato
     """
     Removes duplicate residues in the atom array, keeping only the last occurrence.
 
+    A residue position is ``(chain_id, res_id, ins_code)``: residues that differ only in insertion code (e.g. ``1H``,
+    ``1G``, ... ``1`` in a PDB file) are distinct positions, not sequence heterogeneity.
+
     Args:
         atom_array (AtomArray): The atom array containing the chain information.
 
     Returns:
         AtomArray: The atom array with duplicate residues removed.
     """
-    atom_df = pd.DataFrame(
-        {
-            "chain_id": atom_array.chain_id,
-            "res_id": atom_array.res_id,
-            "res_name": atom_array.res_name,
-        }
-    )
+    position = ["chain_id", "res_id"]
+    if "ins_code" in atom_array.get_annotation_categories():
+        position.append("ins_code")
+    atom_df = pd.DataFrame({key: atom_array.get_annotation(key) for key in [*position, "res_name"]})
 
-    # Get the mask of duplicates based on the combination of chain_id, res_id, and res_name
-    collapsed_df = atom_df.drop_duplicates(subset=["chain_id", "res_id", "res_name"])
+    # Get the mask of duplicates based on the combination of position and res_name
+    collapsed_df = atom_df.drop_duplicates(subset=[*position, "res_name"])
 
-    # Get duplicates based on res_id, keeping the last
-    duplicate_mask = collapsed_df.duplicated(subset=["chain_id", "res_id"], keep="last")
+    # Get duplicates based on position, keeping the last
+    duplicate_mask = collapsed_df.duplicated(subset=position, keep="last")
     duplicates_df = collapsed_df[duplicate_mask]
 
     # Perform a left merge to find rows in atom_df that are also in duplicates_df
-    merged_df = atom_df.merge(duplicates_df, on=["chain_id", "res_id", "res_name"], how="left", indicator=True)
+    merged_df = atom_df.merge(duplicates_df, on=[*position, "res_name"], how="left", indicator=True)
 
     # Create a mask where True indicates the row is not in duplicates_df
     keep = merged_df["_merge"] == "left_only"
